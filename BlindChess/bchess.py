@@ -11,7 +11,7 @@ import os
 import time
 from queue import Queue
 
-Config = { "engineCmd": "E:\\stockfish8\\stockfish_8_x64_popcnt.exe"}
+Config = { "engineCmd": "E:\\stockfish8\\stockfish_8_x64_popcnt.exe" }
 #Config = { "engineCmd": "stockfish"}
 
 class EngineRunner:
@@ -80,9 +80,10 @@ class UCITalker(EngineRunner):
             "r2qkb1r/pp1n1pp1/2pp1n1p/4pb2/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 w kq - 0 8"
             ]
 
-    def setup(self):
+    def setup(self, config):
+        self.engineCmd = config["engineCmd"]
         self.send("uci")
-        self.send("setoption name Skill Level value 0")
+        self.send("setoption name Skill Level value %i" % config["Skill Level"])
         self.send("ucinewgame")
         self.send("position fen %s" % self.puzzle[0])
         print("Black: Kd6\nWhite: Kd4, Qd3\n")
@@ -155,49 +156,66 @@ class UCITalker(EngineRunner):
 
         return " %s%s " % (c, stop)
 
-    def parseCommand(self, cmd):
-        self.getBoard()
+class Game:
+    def __init__(self):
+        self.curgame = False
+
+    def parseCommand(self, cmd, uci):
+        uci.getBoard()
 
         if cmd == "d":
-            self.getBoard()
-            print("\n".join(self.board))
+            uci.getBoard()
+            print("\n".join(uci.board))
         elif cmd == "e":
-            print(self.getOutput("eval", "Total Eval"))
+            print(uci.getOutput("eval", "Total Eval"))
         elif cmd == "clr":
             os.system("clear" if sys.platform == "linux" else "cls")
         elif cmd == "quit":
             return False
+        elif cmd.startswith("load"):
+            print("Not implemented yet")
+        elif cmd.startswith("new"):
+            color = cmd.split()[1]
+            if color.lower().startswith("b"):
+                pass #play first move
+            uci.send("ucinewgame\nposition startpos")
+            self.curgame = True
         elif 4 <= len(cmd) <= 5:
+            if not self.curgame:
+                print("Use new or load first")
+                return True
+
             usermove = cmd
 
-            if self.getUserMove(usermove) is None:
+            if uci.getUserMove(usermove) is None:
                 print("Invalid move")
                 return True
 
-            self.getBoard()
+            uci.getBoard()
             
-            cpumove = self.getCpuMove()
+            cpumove = uci.getCpuMove()
             if cpumove is None:
                 print("Mate")
-                self.send("stop")
+                uci.send("stop")
                 return True
             else:
-                print("\t%s (%s)" %  (cpumove, self.long2pgn(cpumove)))
+                print("\t%s (%s)" %  (cpumove, uci.long2pgn(cpumove)))
         else:
-            self.send(cmd)
-            print(self.read())
+            uci.send(cmd)
+            print(uci.read())
 
         return True
 
-    def loop(self):
-        self.setup()
-        self.getBoard()
+    def parseCmds(self):
+        with UCITalker() as uci:
+            uci.setup()
+            uci.getBoard()
 
-        running = True
-        while running:
-            running = self.parseCommand(input("> "))
+            running = True
+            while running:
+                running = self.parseCommand(input("> "), uci)
 
-        print(self.moves)
+            print(uci.moves)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
