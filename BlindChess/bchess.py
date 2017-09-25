@@ -11,20 +11,7 @@ import os
 import time
 from queue import Queue
 import json
-
-Config = {
-    "engineCmd": "E:\\stockfish8\\stockfish_8_x64_popcnt.exe" ,
-    "Skill Level": 0,
-}
-#Config = { "engineCmd": "stockfish"}
-
-Puzzle = {
-    "8/8/3k4/8/3K4/3Q4/8/8 w - - 0 1",
-    "3k4/7Q/3K4/8/8/8/8/8 w - - 0 1",
-    "3k4/3Q4/3K4/8/8/8/8/8 b - - 0 1",
-    "8/3RKP2/8/8/8/8/8/k7 w - - 0 1",
-    "r2qkb1r/pp1n1pp1/2pp1n1p/4pb2/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 w kq - 0 8"
-}
+import re
 
 class EngineRunner:
     def __init__(self, config):
@@ -86,16 +73,15 @@ class UCITalker(EngineRunner):
         self.moves = []
 
     def setup(self):
-        #self.engineCmd = self.config["engineCmd"]
         self.send("uci")
         self.send("setoption name Skill Level value %i" % self.config["Skill Level"])
         self.send("ucinewgame")
-        self.send("position fen %s" % self.puzzle[0])
-        print("Black: Kd6\nWhite: Kd4, Qd3\n")
+        #self.send("position fen %s" % self.puzzle[0])
+        #print("Black: Kd6\nWhite: Kd4, Qd3\n")
         #self.send("position startpos")
 
     def getBoard(self):
-        data = self.getOutput("d", "Checkers").splitlines()
+        data = self.getOutput(cmd="d", stopTag="Checkers").splitlines()
         self.board = data[1:18]
         self.fen = data[19][5:]
         try:
@@ -108,7 +94,7 @@ class UCITalker(EngineRunner):
         return self.read(stopTag)
 
     def getMove(self, cmd):
-        out = self.getOutput(cmd, "bestmove").splitlines()
+        out = self.getOutput(cmd, stopTag="bestmove").splitlines()
         move = ""
         try:
             move = out[-1].split()[1]
@@ -165,9 +151,9 @@ class GameLoop:
     def __init__(self):
         self.curgame = False
         self.config = None
-        self.puzzles = None
+        self.puzzle = None
         self.configFile = "config.json"
-        self.puzzlesFile = "puzzle.json"
+        self.puzzleFile = "puzzle.json"
 
     def loadConfigs(self):
         try:
@@ -178,8 +164,8 @@ class GameLoop:
             return False
     
         try:
-            with open(self.puzzlesFile) as f:
-                self.puzzles = json.load(f)
+            with open(self.puzzleFile) as f:
+                self.puzzle = json.load(f)
         except FileNotFoundError as e:
             logging.error("Missing file: %s" % e)
             return False
@@ -200,13 +186,17 @@ class GameLoop:
             return False
         elif cmd.startswith("load"):
             print("Not implemented yet")
+        elif cmd.startswith("save"):
+            print("Not implemented yet")
         elif cmd.startswith("new"):
             color = "w"
             if len(cmd) > 3:
                 color = cmd.split()[1]
-            if color.lower().startswith("b"):
-                pass #play first move
             uci.send("ucinewgame\nposition startpos")
+            if color.lower().startswith("b"):
+                uci.getBoard()
+                cpumove = uci.getCpuMove()
+                print("\t%s (%s)" %  (cpumove, uci.long2pgn(cpumove)))
             self.curgame = True
         elif 4 <= len(cmd) <= 5 and re.fullmatch(r"[a-h]\d[a-h]\d\w?", cmd) is not None:
             if not self.curgame:
@@ -238,8 +228,9 @@ class GameLoop:
         if not self.loadConfigs():
             logging.error("Could not load config files")
             return
-        
+
         with UCITalker(self.config) as uci:
+            uci.setup()
             uci.getBoard()
 
             running = True
@@ -250,4 +241,4 @@ class GameLoop:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    Game().parseCmds()
+    GameLoop().parseCmds()

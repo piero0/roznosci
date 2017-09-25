@@ -1,0 +1,26 @@
+{
+    "p01": {
+        "name": "K+Q vs K",
+        "desc": "Your pieces: Kd4,Qd3; Black king on d6",
+        "fen": "8/8/3k4/8/3K4/3Q4/8/8 w - - 0 1",
+        "nextmove": "user"
+    },
+    "p02": {
+        "name": "K+R vs K",
+        "desc": "Your pieces: Kd4,Rd3; Black king on d6",
+        "fen": "8/8/3k4/8/3K4/3R4/8/8 w - - 0 1",
+        "nextmove": "user"
+    },
+    "p03": {
+        "name": "K+P vs K",
+        "desc": "Opposition: Kf5, pawn e5; Black king on e8",
+        "fen": "4k3/8/8/4PK2/8/8/8/8 w - - 0 1",
+        "nextmove": "user"
+    },
+    "p04": {
+        "name": "Some game",
+        "desc": "",
+        "fen": "r2qkb1r/pp1n1pp1/2pp1n1p/4pb2/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 w kq - 0 8",
+        "nextmove": "user"
+    }
+}
