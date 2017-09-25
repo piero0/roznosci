@@ -10,16 +10,28 @@ import sys
 import os
 import time
 from queue import Queue
+import json
 
-Config = { "engineCmd": "E:\\stockfish8\\stockfish_8_x64_popcnt.exe" }
+Config = {
+    "engineCmd": "E:\\stockfish8\\stockfish_8_x64_popcnt.exe" ,
+    "Skill Level": 0,
+}
 #Config = { "engineCmd": "stockfish"}
 
-class EngineRunner:
-    engineCmd = Config["engineCmd"]
+Puzzle = {
+    "8/8/3k4/8/3K4/3Q4/8/8 w - - 0 1",
+    "3k4/7Q/3K4/8/8/8/8/8 w - - 0 1",
+    "3k4/3Q4/3K4/8/8/8/8/8 b - - 0 1",
+    "8/3RKP2/8/8/8/8/8/k7 w - - 0 1",
+    "r2qkb1r/pp1n1pp1/2pp1n1p/4pb2/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 w kq - 0 8"
+}
 
-    def __init__(self):
+class EngineRunner:
+    def __init__(self, config):
         self.eng = None
         self.buf = Queue()
+        self.config = config
+        self.engineCmd = self.config["engineCmd"]
 
     def start(self):
         logging.info("Starting engine")
@@ -68,22 +80,15 @@ class EngineRunner:
         #self.eng.poll()
 
 class UCITalker(EngineRunner):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config):
+        super().__init__(config)
         self.moveTime = 1000
         self.moves = []
-        self.puzzle = [
-            "8/8/3k4/8/3K4/3Q4/8/8 w - - 0 1",
-            "3k4/7Q/3K4/8/8/8/8/8 w - - 0 1",
-            "3k4/3Q4/3K4/8/8/8/8/8 b - - 0 1",
-            "8/3RKP2/8/8/8/8/8/k7 w - - 0 1",
-            "r2qkb1r/pp1n1pp1/2pp1n1p/4pb2/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 w kq - 0 8"
-            ]
 
-    def setup(self, config):
-        self.engineCmd = config["engineCmd"]
+    def setup(self):
+        #self.engineCmd = self.config["engineCmd"]
         self.send("uci")
-        self.send("setoption name Skill Level value %i" % config["Skill Level"])
+        self.send("setoption name Skill Level value %i" % self.config["Skill Level"])
         self.send("ucinewgame")
         self.send("position fen %s" % self.puzzle[0])
         print("Black: Kd6\nWhite: Kd4, Qd3\n")
@@ -156,9 +161,30 @@ class UCITalker(EngineRunner):
 
         return " %s%s " % (c, stop)
 
-class Game:
+class GameLoop:
     def __init__(self):
         self.curgame = False
+        self.config = None
+        self.puzzles = None
+        self.configFile = "config.json"
+        self.puzzlesFile = "puzzle.json"
+
+    def loadConfigs(self):
+        try:
+            with open(self.configFile) as f:
+                self.config = json.load(f)
+        except FileNotFoundError as e:
+            logging.error("Missing file: %s" % e)
+            return False
+    
+        try:
+            with open(self.puzzlesFile) as f:
+                self.puzzles = json.load(f)
+        except FileNotFoundError as e:
+            logging.error("Missing file: %s" % e)
+            return False
+
+        return True
 
     def parseCommand(self, cmd, uci):
         uci.getBoard()
@@ -175,12 +201,14 @@ class Game:
         elif cmd.startswith("load"):
             print("Not implemented yet")
         elif cmd.startswith("new"):
-            color = cmd.split()[1]
+            color = "w"
+            if len(cmd) > 3:
+                color = cmd.split()[1]
             if color.lower().startswith("b"):
                 pass #play first move
             uci.send("ucinewgame\nposition startpos")
             self.curgame = True
-        elif 4 <= len(cmd) <= 5:
+        elif 4 <= len(cmd) <= 5 and re.fullmatch(r"[a-h]\d[a-h]\d\w?", cmd) is not None:
             if not self.curgame:
                 print("Use new or load first")
                 return True
@@ -207,8 +235,11 @@ class Game:
         return True
 
     def parseCmds(self):
-        with UCITalker() as uci:
-            uci.setup()
+        if not self.loadConfigs():
+            logging.error("Could not load config files")
+            return
+        
+        with UCITalker(self.config) as uci:
             uci.getBoard()
 
             running = True
@@ -219,5 +250,4 @@ class Game:
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    with UCITalker() as eng:
-        eng.loop()
+    Game().parseCmds()
