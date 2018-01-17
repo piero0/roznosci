@@ -10,16 +10,15 @@ import sys
 import os
 import time
 from queue import Queue
-
-Config = { "engineCmd": "E:\\stockfish8\\stockfish_8_x64_popcnt.exe"}
-#Config = { "engineCmd": "stockfish"}
+import json
+import re
 
 class EngineRunner:
-    engineCmd = Config["engineCmd"]
-
-    def __init__(self):
+    def __init__(self, config):
         self.eng = None
         self.buf = Queue()
+        self.config = config
+        self.engineCmd = self.config["engineCmd"]
 
     def start(self):
         logging.info("Starting engine")
@@ -68,28 +67,21 @@ class EngineRunner:
         #self.eng.poll()
 
 class UCITalker(EngineRunner):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, config):
+        super().__init__(config)
         self.moveTime = 1000
         self.moves = []
-        self.puzzle = [
-            "8/8/3k4/8/3K4/3Q4/8/8 w - - 0 1",
-            "3k4/7Q/3K4/8/8/8/8/8 w - - 0 1",
-            "3k4/3Q4/3K4/8/8/8/8/8 b - - 0 1",
-            "8/3RKP2/8/8/8/8/8/k7 w - - 0 1",
-            "r2qkb1r/pp1n1pp1/2pp1n1p/4pb2/2PP4/2N1PN2/PP2BPPP/R1BQ1RK1 w kq - 0 8"
-            ]
 
     def setup(self):
         self.send("uci")
-        self.send("setoption name Skill Level value 0")
+        self.send("setoption name Skill Level value %i" % self.config["Skill Level"])
         self.send("ucinewgame")
-        self.send("position fen %s" % self.puzzle[0])
-        print("Black: Kd6\nWhite: Kd4, Qd3\n")
+        #self.send("position fen %s" % self.puzzle[0])
+        #print("Black: Kd6\nWhite: Kd4, Qd3\n")
         #self.send("position startpos")
 
     def getBoard(self):
-        data = self.getOutput("d", "Checkers").splitlines()
+        data = self.getOutput(cmd="d", stopTag="Checkers").splitlines()
         self.board = data[1:18]
         self.fen = data[19][5:]
         try:
@@ -102,7 +94,7 @@ class UCITalker(EngineRunner):
         return self.read(stopTag)
 
     def getMove(self, cmd):
-        out = self.getOutput(cmd, "bestmove").splitlines()
+        out = self.getOutput(cmd, stopTag="bestmove").splitlines()
         move = ""
         try:
             move = out[-1].split()[1]
@@ -155,51 +147,98 @@ class UCITalker(EngineRunner):
 
         return " %s%s " % (c, stop)
 
-    def parseCommand(self, cmd):
-        self.getBoard()
+class GameLoop:
+    def __init__(self):
+        self.curgame = False
+        self.config = None
+        self.puzzle = None
+        self.configFile = "config.json"
+        self.puzzleFile = "puzzle.json"
+
+    def loadConfigs(self):
+        try:
+            with open(self.configFile) as f:
+                self.config = json.load(f)
+        except FileNotFoundError as e:
+            logging.error("Missing file: %s" % e)
+            return False
+    
+        try:
+            with open(self.puzzleFile) as f:
+                self.puzzle = json.load(f)
+        except FileNotFoundError as e:
+            logging.error("Missing file: %s" % e)
+            return False
+
+        return True
+
+    def parseCommand(self, cmd, uci):
+        uci.getBoard()
 
         if cmd == "d":
-            self.getBoard()
-            print("\n".join(self.board))
+            uci.getBoard()
+            print("\n".join(uci.board))
         elif cmd == "e":
-            print(self.getOutput("eval", "Total Eval"))
+            print(uci.getOutput("eval", "Total Eval"))
         elif cmd == "clr":
             os.system("clear" if sys.platform == "linux" else "cls")
         elif cmd == "quit":
             return False
-        elif 4 <= len(cmd) <= 5:
+        elif cmd.startswith("load"):
+            print("Not implemented yet")
+        elif cmd.startswith("save"):
+            print("Not implemented yet")
+        elif cmd.startswith("new"):
+            color = "w"
+            if len(cmd) > 3:
+                color = cmd.split()[1]
+            uci.send("ucinewgame\nposition startpos")
+            if color.lower().startswith("b"):
+                uci.getBoard()
+                cpumove = uci.getCpuMove()
+                print("\t%s (%s)" %  (cpumove, uci.long2pgn(cpumove)))
+            self.curgame = True
+        elif 4 <= len(cmd) <= 5 and re.fullmatch(r"[a-h]\d[a-h]\d\w?", cmd) is not None:
+            if not self.curgame:
+                print("Use new or load first")
+                return True
+
             usermove = cmd
 
-            if self.getUserMove(usermove) is None:
+            if uci.getUserMove(usermove) is None:
                 print("Invalid move")
                 return True
 
-            self.getBoard()
+            uci.getBoard()
             
-            cpumove = self.getCpuMove()
+            cpumove = uci.getCpuMove()
             if cpumove is None:
                 print("Mate")
-                self.send("stop")
+                uci.send("stop")
                 return True
             else:
-                print("\t%s (%s)" %  (cpumove, self.long2pgn(cpumove)))
+                print("\t%s (%s)" %  (cpumove, uci.long2pgn(cpumove)))
         else:
-            self.send(cmd)
-            print(self.read())
+            uci.send(cmd)
+            print(uci.read())
 
         return True
 
-    def loop(self):
-        self.setup()
-        self.getBoard()
+    def parseCmds(self):
+        if not self.loadConfigs():
+            logging.error("Could not load config files")
+            return
 
-        running = True
-        while running:
-            running = self.parseCommand(input("> "))
+        with UCITalker(self.config) as uci:
+            uci.setup()
+            uci.getBoard()
 
-        print(self.moves)
+            running = True
+            while running:
+                running = self.parseCommand(input("> "), uci)
+
+            print(uci.moves)
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    with UCITalker() as eng:
-        eng.loop()
+    GameLoop().parseCmds()
