@@ -2,7 +2,9 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-__attribute__ ((visibility ("default"))) void init_debug() {
+#pragma GCC visibility push(default)
+
+void init_debug() {
     spdlog::info("before setup");
     spdlog::flush_every(std::chrono::seconds(3));
     auto file_logger = spdlog::basic_logger_mt("injector", "test.log");
@@ -16,6 +18,6 @@ __attribute__ ((visibility ("default"))) void init_debug() {
     spdlog::info("after setup");
 }
 
-__attribute__ ((visibility ("default"))) void cel_debug(unsigned long cnt) {
+void cel_debug(unsigned long cnt) {
     spdlog::info("cnt jest: {0}", cnt);
 }
