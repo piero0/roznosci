@@ -1,7 +1,7 @@
 DYNINST := /home/piero/projects/dyninst/bin
 CXXFLAGS := -g -std=c++17 -I$(DYNINST)/include
 
-all: target libcpp lib injector
+all: target libcpp libc injector
 
 target: target.o
 
