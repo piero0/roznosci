@@ -5,9 +5,10 @@ all: target libcpp libc injector
 
 target: target.o
 
-libcpp: CXXFLAGS := -shared -fPIC -fvisibility=hidden
+libcpp: CXXFLAGS := -shared -fPIC -fvisibility=hidden -std=c++17
+libcpp: LDLIBS := -lpthread
 libcpp: libcpp.o
-	$(CXX) $(CXXFLAGS) -o $@.so $^
+	$(CXX) $(CXXFLAGS) -o $@.so $^ $(LDLIBS)
 
 libc: CFLAGS := -shared -fPIC
 libc: libc.c
